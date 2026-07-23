@@ -1,0 +1,127 @@
+# =============================================================================
+# Membangun RESTful Microservice (fondasi sebelum Circuit Breaker)
+#  - Docker image & Dockerfile ............ (pert. 1-2)  tiap service
+#  - Volume, Network, Compose ............. (pert. 3)    postgres+volume, ecommerce-net
+#  - Compose lanjutan FE+BE+DB ............ (pert. 4)    frontend + services + db
+#  - Arsitektur microservice .............. (pert. 5)    service per domain
+#  - RESTful microservice + Swagger ....... (pert. 6)    product/order/auth + /docs
+#  - API Gateway (Nginx) .................. (pert. 7)    gateway single entry point
+#  - Auth JWT + RBAC ...................... (pert. 9)    auth-service
+#
+# CATATAN: order-service memanggil product-service LANGSUNG (axios biasa),
+# TANPA retry / circuit breaker / message broker. Folder ini adalah fondasi yang
+# akan dipakai & dikembangkan di materi Circuit Breaker & Retry (pertemuan 10).
+# =============================================================================
+services:
+  # ---------- Infrastruktur ----------
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: appdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - ecommerce-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  adminer:
+    image: adminer
+    ports:
+      - "8000:8080"
+    networks:
+      - ecommerce-net
+    depends_on:
+      - postgres
+
+  # ---------- Microservices ----------
+  auth-service:
+    build: ./services/auth-service
+    image: ecommerce/auth-service:v10.1
+    environment:
+      PORT: 3004
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+      DB_NAME: auth_db
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "3004:3004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ecommerce-net
+
+  product-service:
+    build: ./services/product-service
+    image: ecommerce/product-service:v10.1
+    environment:
+      PORT: 3001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+      DB_NAME: product_db
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ecommerce-net
+
+  order-service:
+    build: ./services/order-service
+    image: ecommerce/order-service:v10.1
+    environment:
+      PORT: 3002
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+      DB_NAME: order_db
+      JWT_SECRET: ${JWT_SECRET}
+      PRODUCT_SERVICE_URL: http://product-service:3001 # nama+port INTERNAL
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      product-service:
+        condition: service_started
+    networks:
+      - ecommerce-net
+
+  # ---------- Frontend & Gateway ----------
+  frontend:
+    build: ./frontend
+    networks:
+      - ecommerce-net
+
+  gateway:
+    image: nginx:alpine
+    ports:
+      - "8080:80" # host 8080 = pintu utama
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on: [frontend, auth-service, product-service, order-service]
+    networks:
+      - ecommerce-net
+
+networks:
+  ecommerce-net:
+    driver: bridge
+
+volumes:
+  pgdata:
