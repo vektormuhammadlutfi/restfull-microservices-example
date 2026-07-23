@@ -62,9 +62,108 @@ app.use(
   swaggerUi.serve,
   swaggerUi.setup({
     openapi: '3.0.0',
-    info: { title: 'Order Service', version: '1.0.0' },
+    info: {
+      title: 'Order Service',
+      version: '1.0.0',
+      description: 'Layanan order (REST + Postgres + JWT). Memanggil product-service langsung untuk validasi harga/stok.',
+    },
+    servers: [{ url: '/', description: 'Order service' }],
+    tags: [{ name: 'Orders' }, { name: 'Health' }],
     paths: {
-      '/orders': { get: { summary: 'Order milik user (auth)' }, post: { summary: 'Buat order (auth)' } },
+      '/health': {
+        get: {
+          tags: ['Health'],
+          summary: 'Cek status service',
+          responses: {
+            200: {
+              description: 'Service UP',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/HealthStatus' } } },
+            },
+          },
+        },
+      },
+      '/orders': {
+        get: {
+          tags: ['Orders'],
+          summary: 'Daftar order milik user yang sedang login',
+          security: [{ bearerAuth: [] }],
+          responses: {
+            200: {
+              description: 'Daftar order',
+              content: {
+                'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Order' } } },
+              },
+            },
+            401: {
+              description: 'token tidak ada / tidak valid',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+            },
+          },
+        },
+        post: {
+          tags: ['Orders'],
+          summary: 'Buat order baru',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/OrderInput' } } },
+          },
+          responses: {
+            201: {
+              description: 'Order berhasil dibuat',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } },
+            },
+            400: {
+              description: 'productId tidak diisi',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+            },
+            401: {
+              description: 'token tidak ada / tidak valid',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+            },
+            502: {
+              description: 'product-service tidak bisa dihubungi',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+            },
+          },
+        },
+      },
+    },
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      },
+      schemas: {
+        HealthStatus: {
+          type: 'object',
+          properties: { service: { type: 'string' }, status: { type: 'string' } },
+        },
+        OrderInput: {
+          type: 'object',
+          required: ['productId'],
+          properties: {
+            productId: { type: 'integer', example: 1 },
+            qty: { type: 'integer', example: 2, default: 1 },
+          },
+        },
+        Order: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            userId: { type: 'integer' },
+            productId: { type: 'integer' },
+            qty: { type: 'integer' },
+            productName: { type: 'string' },
+            price: { type: 'integer' },
+            total: { type: 'integer' },
+            status: { type: 'string', example: 'CONFIRMED' },
+          },
+        },
+        Error: {
+          type: 'object',
+          properties: { error: { type: 'string' } },
+        },
+      },
     },
   }),
 )

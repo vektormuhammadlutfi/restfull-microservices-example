@@ -29,13 +29,120 @@ const User = sequelize.define('User', {
   role: { type: DataTypes.STRING, defaultValue: 'customer' }, // customer | admin (RBAC)
 })
 
-// ---------- Swagger (pertemuan 6) ----------
+// ---------- Swagger ----------
 const swaggerDoc = {
   openapi: '3.0.0',
-  info: { title: 'Auth Service', version: '1.0.0' },
+  info: {
+    title: 'Auth Service',
+    version: '1.0.0',
+    description: 'Layanan autentikasi (register, login) dengan JWT + RBAC (customer/admin).',
+  },
+  servers: [{ url: '/', description: 'Auth service' }],
+  tags: [{ name: 'Auth' }, { name: 'Health' }],
   paths: {
-    '/register': { post: { summary: 'Register user baru', responses: { 201: { description: 'created' } } } },
-    '/login': { post: { summary: 'Login -> JWT token', responses: { 200: { description: 'ok' } } } },
+    '/health': {
+      get: {
+        tags: ['Health'],
+        summary: 'Cek status service',
+        responses: {
+          200: {
+            description: 'Service UP',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/HealthStatus' } } },
+          },
+        },
+      },
+    },
+    '/register': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Register user baru',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/RegisterRequest' } } },
+        },
+        responses: {
+          201: {
+            description: 'User berhasil dibuat',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/UserPublic' } } },
+          },
+          400: {
+            description: 'username / password tidak diisi',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+          },
+          409: {
+            description: 'username sudah dipakai',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+          },
+        },
+      },
+    },
+    '/login': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Login dan mendapatkan JWT token',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/LoginRequest' } } },
+        },
+        responses: {
+          200: {
+            description: 'Login berhasil',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/LoginResponse' } } },
+          },
+          401: {
+            description: 'username / password salah',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+          },
+        },
+      },
+    },
+  },
+  components: {
+    securitySchemes: {
+      bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+    },
+    schemas: {
+      HealthStatus: {
+        type: 'object',
+        properties: { service: { type: 'string' }, status: { type: 'string' } },
+      },
+      RegisterRequest: {
+        type: 'object',
+        required: ['username', 'password'],
+        properties: {
+          username: { type: 'string', example: 'budi' },
+          password: { type: 'string', format: 'password', example: 'rahasia123' },
+          role: { type: 'string', enum: ['customer', 'admin'], default: 'customer' },
+        },
+      },
+      LoginRequest: {
+        type: 'object',
+        required: ['username', 'password'],
+        properties: {
+          username: { type: 'string', example: 'budi' },
+          password: { type: 'string', format: 'password', example: 'rahasia123' },
+        },
+      },
+      LoginResponse: {
+        type: 'object',
+        properties: {
+          token: { type: 'string', description: 'JWT token, berlaku 1 jam' },
+          role: { type: 'string', enum: ['customer', 'admin'] },
+        },
+      },
+      UserPublic: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          username: { type: 'string' },
+          role: { type: 'string', enum: ['customer', 'admin'] },
+        },
+      },
+      Error: {
+        type: 'object',
+        properties: { error: { type: 'string' } },
+      },
+    },
   },
 }
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc))

@@ -51,10 +51,125 @@ app.use(
   swaggerUi.serve,
   swaggerUi.setup({
     openapi: '3.0.0',
-    info: { title: 'Product Service', version: '1.0.0' },
+    info: {
+      title: 'Product Service',
+      version: '1.0.0',
+      description: 'Layanan katalog produk (REST + Postgres). Membuat produk memerlukan role admin.',
+    },
+    servers: [{ url: '/', description: 'Product service' }],
+    tags: [{ name: 'Products' }, { name: 'Health' }],
     paths: {
-      '/products': { get: { summary: 'Daftar produk' }, post: { summary: 'Buat produk (admin)' } },
-      '/products/{id}': { get: { summary: 'Detail produk' } },
+      '/health': {
+        get: {
+          tags: ['Health'],
+          summary: 'Cek status service',
+          responses: {
+            200: {
+              description: 'Service UP',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/HealthStatus' } } },
+            },
+          },
+        },
+      },
+      '/products': {
+        get: {
+          tags: ['Products'],
+          summary: 'Daftar semua produk',
+          responses: {
+            200: {
+              description: 'Daftar produk',
+              content: {
+                'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Product' } } },
+              },
+            },
+          },
+        },
+        post: {
+          tags: ['Products'],
+          summary: 'Buat produk baru (admin)',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ProductInput' } } },
+          },
+          responses: {
+            201: {
+              description: 'Produk berhasil dibuat',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/Product' } } },
+            },
+            400: {
+              description: 'name / price tidak diisi',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+            },
+            401: {
+              description: 'token tidak ada / tidak valid',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+            },
+            403: {
+              description: 'butuh role admin',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+            },
+          },
+        },
+      },
+      '/products/{id}': {
+        get: {
+          tags: ['Products'],
+          summary: 'Detail satu produk',
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              schema: { type: 'integer' },
+              description: 'ID produk',
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Detail produk',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/Product' } } },
+            },
+            404: {
+              description: 'Produk tidak ditemukan',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+            },
+          },
+        },
+      },
+    },
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      },
+      schemas: {
+        HealthStatus: {
+          type: 'object',
+          properties: { service: { type: 'string' }, status: { type: 'string' } },
+        },
+        Product: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            name: { type: 'string', example: 'Kopi Arabika 250g' },
+            price: { type: 'integer', example: 85000 },
+            stock: { type: 'integer', example: 40 },
+          },
+        },
+        ProductInput: {
+          type: 'object',
+          required: ['name', 'price'],
+          properties: {
+            name: { type: 'string', example: 'Kopi Arabika 250g' },
+            price: { type: 'integer', example: 85000 },
+            stock: { type: 'integer', example: 40, default: 0 },
+          },
+        },
+        Error: {
+          type: 'object',
+          properties: { error: { type: 'string' } },
+        },
+      },
     },
   }),
 )
